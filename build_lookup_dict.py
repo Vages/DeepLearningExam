@@ -1,14 +1,14 @@
 from collections import defaultdict
 
 import tensorflow as tf
-from autoencoder import pickle_to_numpy_array
 from helpers import get_all_pickle_files, pickle_to_numpy_array
+from autoencoder import graph
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 
 # Launch the graph
-with tf.Session(config=config) as sess:
+with tf.Session(config=config, graph=graph) as sess:
     saver = tf.train.Saver()
 
     saver.restore(sess, "models/autoencoder.ckpt")

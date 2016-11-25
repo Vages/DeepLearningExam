@@ -23,70 +23,72 @@ n_input = 6012  # Number of tags that can be output by the actual network
 encoding_size = 14
 structure = [n_input, encoding_size]
 
-global_step = tf.Variable(0, trainable=False)
-learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 5000, 0.7)
+graph = tf.Graph()
 
-X = tf.placeholder("float", [None, n_input], name="inputs")
+with graph.as_default():
+    global_step = tf.Variable(0, trainable=False)
+    learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 5000, 0.7)
 
-encoder_weights = []
-encoder_biases = []
+    X = tf.placeholder("float", [None, n_input], name="inputs")
 
-decoder_weights = []
-decoder_biases = []
+    encoder_weights = []
+    encoder_biases = []
 
-for i in range(1, len(structure)):
-    encoder_weights.append(tf.Variable(tf.random_normal([structure[i - 1], structure[i]])))
-    encoder_biases.append(tf.Variable(tf.random_normal([structure[i]])))
+    decoder_weights = []
+    decoder_biases = []
 
-for i in range(len(structure) - 2, -1, -1):
-    decoder_weights.append(tf.Variable(tf.random_normal([structure[i + 1], structure[i]])))
-    decoder_biases.append(tf.Variable(tf.random_normal([structure[i]])))
+    for i in range(1, len(structure)):
+        encoder_weights.append(tf.Variable(tf.random_normal([structure[i - 1], structure[i]])))
+        encoder_biases.append(tf.Variable(tf.random_normal([structure[i]])))
 
-
-# Building the encoder
-def encoder(x):
-    # Encoder Hidden layer with sigmoid activation #1
-    encoded = tf.nn.sigmoid(tf.add(tf.matmul(x, encoder_weights[0]), encoder_biases[0]))
-    for i in range(1, len(encoder_weights)):
-        encoded = tf.nn.sigmoid(tf.add(tf.matmul(encoded, encoder_weights[i]), encoder_biases[i]))
-
-    encoded = tf.round(encoded, name="binary_code")
-
-    return encoded
+    for i in range(len(structure) - 2, -1, -1):
+        decoder_weights.append(tf.Variable(tf.random_normal([structure[i + 1], structure[i]])))
+        decoder_biases.append(tf.Variable(tf.random_normal([structure[i]])))
 
 
-# Building the decoder
-def decoder(x):
-    decoded = tf.nn.sigmoid(tf.add(tf.matmul(x, decoder_weights[0]), decoder_biases[0]))
+    # Building the encoder
+    def encoder(x):
+        # Encoder Hidden layer with sigmoid activation #1
+        encoded = tf.nn.sigmoid(tf.add(tf.matmul(x, encoder_weights[0]), encoder_biases[0]))
+        for i in range(1, len(encoder_weights)):
+            encoded = tf.nn.sigmoid(tf.add(tf.matmul(encoded, encoder_weights[i]), encoder_biases[i]))
 
-    for i in range(1, len(decoder_weights)):
-        decoded = tf.nn.sigmoid(tf.add(tf.matmul(decoded, decoder_weights[i]), decoder_biases[i]))
-    return decoded
+        encoded = tf.round(encoded, name="binary_code")
+
+        return encoded
 
 
-# Construct model
-encoder_op = encoder(X)
-decoder_op = decoder(encoder_op)
+    # Building the decoder
+    def decoder(x):
+        decoded = tf.nn.sigmoid(tf.add(tf.matmul(x, decoder_weights[0]), decoder_biases[0]))
 
-# Prediction
-y_pred = decoder_op
-# Targets (Labels) are the input data.
-y_true = X
+        for i in range(1, len(decoder_weights)):
+            decoded = tf.nn.sigmoid(tf.add(tf.matmul(decoded, decoder_weights[i]), decoder_biases[i]))
+        return decoded
 
-# Define loss and optimizer, minimize the squared error
-cost = tf.reduce_mean(tf.pow(y_true - y_pred, 2))
-optimizer = tf.train.RMSPropOptimizer(learning_rate).minimize(cost, global_step=global_step)
 
-init = tf.initialize_all_variables()
+    # Construct model
+    encoder_op = encoder(X)
+    decoder_op = decoder(encoder_op)
+
+    # Prediction
+    y_pred = decoder_op
+    # Targets (Labels) are the input data.
+    y_true = X
+
+    # Define loss and optimizer, minimize the squared error
+    cost = tf.reduce_mean(tf.pow(y_true - y_pred, 2))
+    optimizer = tf.train.RMSPropOptimizer(learning_rate).minimize(cost, global_step=global_step)
+
+    init = tf.initialize_all_variables()
+    saver = tf.train.Saver()
 
 
 def train(training_epochs=100, display_step=1):
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     # Launch the graph
-    with tf.Session(config=config) as sess:
-        saver = tf.train.Saver()
-
+    with tf.Session(config=config, graph=graph) as sess:
         try:
             saver.restore(sess, "models/autoencoder.ckpt")
         except ValueError:
