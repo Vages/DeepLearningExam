@@ -1,7 +1,8 @@
 from collections import defaultdict
 
 import tensorflow as tf
-from autoencoder import get_all_pickle_files, pickle_to_numpy_array
+from autoencoder import pickle_to_numpy_array
+from helpers import get_all_pickle_files, pickle_to_numpy_array
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -16,7 +17,7 @@ with tf.Session(config=config) as sess:
     binary_layer = sess.graph.get_tensor_by_name("binary_code:0")
     X = sess.graph.get_tensor_by_name("inputs:0")
     for f in get_all_pickle_files("train/pickle"):
-        (file_paths, labels), values = pickle_to_numpy_array(f)
+        (file_paths, labels), values = pickle_to_numpy_array(f, 6012)
 
         encodings = sess.run(binary_layer, feed_dict={X: values})
 
