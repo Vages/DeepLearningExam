@@ -17,21 +17,15 @@ import os
 import pickle
 
 # Parameters
-# learning_rate = 0.1
-training_epochs = 100
-batch_size = 256
-display_step = 1
-examples_to_show = 10
-
-global_step = tf.Variable(0, trainable=False)
 starter_learning_rate = 0.5
-learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 5000, 0.7)
 
 # Network Parameters
 n_input = 6012  # Number of tags that can be output by the actual network
 encoding_size = 14
-
 structure = [n_input, encoding_size]
+
+global_step = tf.Variable(0, trainable=False)
+learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 5000, 0.7)
 
 X = tf.placeholder("float", [None, n_input], name="inputs")
 
@@ -84,7 +78,6 @@ y_true = X
 cost = tf.reduce_mean(tf.pow(y_true - y_pred, 2))
 optimizer = tf.train.RMSPropOptimizer(learning_rate).minimize(cost, global_step=global_step)
 
-# Initializing the variables
 init = tf.initialize_all_variables()
 
 
@@ -97,9 +90,9 @@ def get_all_pickle_files(train_folder, combined=False):
                     file not in ["combined.pickle", "OLD-all_files.pickle"]]
 
 
-def get_string_to_index_dict():
+def get_string_to_index_map():
     string_to_index = dict()
-    with open("openimages-dataset/clean-dict.csv", mode="r", encoding="utf8") as f:
+    with open("openimages_dataset/clean-dict.csv", mode="r", encoding="utf8") as f:
         for i, line in enumerate(f.readlines()):
             label = line.strip().split(",")[1][1:-1]
             string_to_index[label] = i
@@ -107,12 +100,9 @@ def get_string_to_index_dict():
     return string_to_index
 
 
-string_label_map = get_string_to_index_dict()
-
-
 def pickle_to_numpy_array(filename, string_map=None):
     if string_map is None:
-        string_map = get_string_to_index_dict()
+        string_map = get_string_to_index_map()
     with open(filename, mode="rb") as f:
         pickled_dict = pickle.load(f)
 
@@ -128,24 +118,36 @@ def pickle_to_numpy_array(filename, string_map=None):
     for i, key in enumerate(pickled_dict):
         path_to_image = os.path.join(name_of_train_or_validate_folder, "pics", name_of_picture_folder, key + ".jpg")
         image_files.append(path_to_image)
-        tmp_labels = []
-        for label, value in pickled_dict[key]:
-            try:
-                j = string_map[label]
-                data[i, j] = value  # Value of the label
-                tmp_labels.append(label)
-            except KeyError:
-                continue
 
-        labels.append(tmp_labels)
+        encoding, encoded_labels = make_numpy_array_for_one_example(pickled_dict[key], string_map)
+
+        data[i] = encoding
+        labels.append(encoded_labels)
 
     return (image_files, labels), data
 
 
-if __name__ == "__main__":
+def make_numpy_array_for_one_example(label_value_tuples, string_to_index_map=None):
+    if string_to_index_map is None:
+        string_to_index_map = get_string_to_index_map()
+
+    no_of_categories = 6012
+    encoding_array = np.zeros([no_of_categories])
+    labels_that_were_encoded = []
+    for label, value in label_value_tuples:
+        try:
+            j = string_to_index_map[label]
+            encoding_array[j] = value
+            labels_that_were_encoded.append(label)
+        except KeyError:
+            continue
+
+    return encoding_array, labels_that_were_encoded
+
+
+def train(training_epochs=100, display_step=1):
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
-
     # Launch the graph
     with tf.Session(config=config) as sess:
         saver = tf.train.Saver()
@@ -154,6 +156,7 @@ if __name__ == "__main__":
             saver.restore(sess, "models/autoencoder.ckpt")
         except ValueError:
             print("Model not found. Initializing new")
+            # Initializing the variables
             sess.run(init)
 
         costs = []
@@ -200,3 +203,7 @@ if __name__ == "__main__":
                     saver.save(sess, "models/autoencoder.ckpt")
 
         print("Optimization Finished!")
+
+
+if __name__ == "__main__":
+    train()
