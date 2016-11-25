@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import os
 
+
 def get_all_pickle_files(train_folder, combined=False):
     for root, _, files in os.walk(train_folder):
         if combined:

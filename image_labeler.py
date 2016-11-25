@@ -85,5 +85,6 @@ def label(image_path, checkpoint="openimages_dataset/data/2016_08/model.ckpt", n
 
     return returned_labels
 
+
 if __name__ == "__main__":
-    print(label(os.path.join(os.path.dirname(os.path.abspath(__file__)), "validate/pics/000000000/0ad919872b0963f9.jpg")))
+    print(label("./validate/pics/000000000/0ad919872b0963f9.jpg"))
