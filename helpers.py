@@ -15,20 +15,24 @@ def get_all_pickle_files(train_folder, combined=False):
 
 def get_string_to_index_map():
     string_to_index = dict()
+    index_counter = 0
     with open("openimages_dataset/clean-dict.csv", mode="r", encoding="utf8") as f:
-        for i, line in enumerate(f.readlines()):
+        for line in f.readlines():
             label = line.strip().split(",")[1][1:-1]
-            string_to_index[label] = i
+            if label not in string_to_index.keys():
+                string_to_index[label] = index_counter
+                index_counter += 1
 
     return string_to_index
 
 
-def pickle_to_numpy_array(filename, n_input, string_map=None):
+def pickle_to_numpy_array(filename, string_map=None):
     if string_map is None:
-        string_map = get_string_to_index_map()
+        string_map = global_string_to_index_map
     with open(filename, mode="rb") as f:
         pickled_dict = pickle.load(f)
 
+    n_input = len(string_map)
     no_examples = len(pickled_dict)
 
     name_of_picture_folder = os.path.splitext(filename)[0][-9:]
@@ -52,9 +56,9 @@ def pickle_to_numpy_array(filename, n_input, string_map=None):
 
 def make_numpy_array_for_one_example(label_value_tuples, string_to_index_map=None):
     if string_to_index_map is None:
-        string_to_index_map = get_string_to_index_map()
+        string_to_index_map = global_string_to_index_map
 
-    no_of_categories = 6012
+    no_of_categories = len(string_to_index_map)
     encoding_array = np.zeros([no_of_categories])
     labels_that_were_encoded = []
     for label, value in label_value_tuples:
@@ -66,3 +70,5 @@ def make_numpy_array_for_one_example(label_value_tuples, string_to_index_map=Non
             continue
 
     return encoding_array, labels_that_were_encoded
+
+global_string_to_index_map = get_string_to_index_map()

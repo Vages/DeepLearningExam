@@ -38,7 +38,10 @@ def test(queries=list(), location='./test'):
         image.show()
 
         # Generate a random list of 50 entries
-        cluster = [training_labels[random.randint(0, len(training_labels) - 1)] for idx in range(50)]
+        cluster = [training_labels[random.randint(0, len(training_labels) - 1)] for _ in range(50)]
         my_return_dict[query] = cluster
 
     return my_return_dict
+
+if __name__ == "__main__":
+    test()

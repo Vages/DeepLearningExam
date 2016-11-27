@@ -64,7 +64,9 @@ def label(image_path, checkpoint="openimages_dataset/data/2016_08/model.ckpt", n
                                          variables.initialize_local_variables(),
                                          data_flow_ops.initialize_all_tables())
         saver = tf_saver.Saver()
-        sess = tf.Session()
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
         saver.restore(sess, checkpoint)
 
         # Run the evaluation on the image
@@ -80,8 +82,13 @@ def label(image_path, checkpoint="openimages_dataset/data/2016_08/model.ckpt", n
         display_name = label_dict.get(mid, 'unknown')
         score = predictions_eval[idx]
         if score < threshold:
-            break
-        returned_labels.append((display_name, round(score, rounding_digits)))
+            if returned_labels:
+                break
+            else:
+                threshold -= 0.1
+                if threshold < 0.1:
+                    break
+        returned_labels.append((display_name, score))
 
     return returned_labels
 

@@ -14,20 +14,20 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import tensorflow as tf
 
-from helpers import get_all_pickle_files, pickle_to_numpy_array
+from helpers import get_all_pickle_files, pickle_to_numpy_array, get_string_to_index_map
 
 starter_learning_rate = 0.5
 
 # Network Parameters
-n_input = 6012  # Number of tags that can be output by the actual network
-encoding_size = 14
+n_input = len(get_string_to_index_map())  # Number of tags that can be output by the actual network
+encoding_size = 24
 structure = [n_input, encoding_size]
 
 graph = tf.Graph()
 
 with graph.as_default():
     global_step = tf.Variable(0, trainable=False)
-    learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 5000, 0.7)
+    learning_rate = 0.1  # tf.train.exponential_decay(starter_learning_rate, global_step, 5000, 0.7)
 
     X = tf.placeholder("float", [None, n_input], name="inputs")
 
@@ -84,62 +84,92 @@ with graph.as_default():
     saver = tf.train.Saver()
 
 
-def train(training_epochs=100, display_step=1):
+def train(training_epochs=100, display_step=1, batch_size=100, create_new_model=False):
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    # Launch the graph
+    with tf.Session(config=config, graph=graph) as sess:
+        if not create_new_model:
+            try:
+                saver.restore(sess, "models/autoencoder.ckpt")
+                print("Found previous model at models/autoencoder.ckpt")
+            except ValueError:
+                print("Model not found. Initializing new")
+                # Initializing the variables
+                sess.run(init)
+        else:
+            print("Initializing new model")
+            sess.run(init)
+
+        validation_costs = []
+        for f in get_all_pickle_files("validate/pickle", combined=True):
+            _, test_xs = pickle_to_numpy_array(f)
+            if len(test_xs) == 0:
+                continue
+            c = sess.run(cost, feed_dict={X: test_xs})
+            validation_costs.append(c)
+
+        avg_validation_cost = sum(validation_costs) / len(validation_costs)
+
+        last_validation_cost = avg_validation_cost
+        # Training cycle
+        training_files = get_all_pickle_files("train/pickle", combined=True)
+        for epoch in range(training_epochs):
+            # Loop over all batches
+            training_costs = []
+            for f in training_files:
+                _, all_xs = pickle_to_numpy_array(f)
+                np.random.shuffle(all_xs)
+                for i in range(0, len(all_xs), batch_size):
+                    batch_xs = all_xs[i:min(i + batch_size, len(all_xs)), :]
+                    # Run optimization op (backprop) and cost op (to get loss value)
+                    _, c = sess.run([optimizer, cost], feed_dict={X: batch_xs})
+                    training_costs.append(c)
+            # Display logs per epoch step
+            if epoch % display_step == 0:
+                avg_training_cost = sum(training_costs) / len(training_costs)
+                print("Epoch:", '%04d' % (epoch + 1),
+                      "cost=", "{:.9f}".format(avg_training_cost))
+
+                validation_costs = []
+                for f in get_all_pickle_files("validate/pickle"):
+                    _, test_xs = pickle_to_numpy_array(f)
+                    if len(test_xs) == 0:
+                        continue
+                    c = sess.run(cost, feed_dict={X: test_xs})
+                    validation_costs.append(c)
+
+                avg_validation_cost = sum(validation_costs) / len(validation_costs)
+                print("Validation set cost:", "{:.9f}".format(avg_validation_cost))
+                if avg_validation_cost > last_validation_cost:
+                    print("Validation cost worsened. Breaking training.")
+                    break
+                else:
+                    last_validation_cost = avg_validation_cost
+                    saver.save(sess, "models/autoencoder.ckpt")
+
+        print("Optimization Finished!")
+
+
+def get_binary_classification(image_as_numpy_array):
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     # Launch the graph
     with tf.Session(config=config, graph=graph) as sess:
         try:
             saver.restore(sess, "models/autoencoder.ckpt")
-        except ValueError:
-            print("Model not found. Initializing new")
-            # Initializing the variables
-            sess.run(init)
+        except ValueError as e:
+            print("Autoencoder model not found")
+            raise e
 
-        costs = []
-        for f in get_all_pickle_files("validate/pickle", combined=True):
-            _, test_xs = pickle_to_numpy_array(f, n_input)
-            if len(test_xs) == 0:
-                continue
-            c = sess.run(cost, feed_dict={X: test_xs})
-            costs.append(c)
+        encoded = sess.run(encoder_op, feed_dict={X: [image_as_numpy_array]})
 
-        avg_cost = sum(costs) / len(costs)
+        code_int_array = []
 
-        last_valid_cost = avg_cost
-        # Training cycle
-        for epoch in range(training_epochs):
-            # Loop over all batches
-            for f in get_all_pickle_files("train/pickle"):
-                _, all_xs = pickle_to_numpy_array(f, n_input)
-                np.random.shuffle(all_xs)
-                for i in range(0, len(all_xs), 100):
-                    batch_xs = all_xs[i:i + 100, :]
-                    # Run optimization op (backprop) and cost op (to get loss value)
-                    _, c = sess.run([optimizer, cost], feed_dict={X: batch_xs})
-            # Display logs per epoch step
-            if epoch % display_step == 0:
-                print("Epoch:", '%04d' % (epoch + 1),
-                      "cost=", "{:.9f}".format(c))
+        for float_num in encoded[0]:
+            code_int_array.append(int(float_num))
 
-                costs = []
-                for f in get_all_pickle_files("validate/pickle"):
-                    _, test_xs = pickle_to_numpy_array(f, n_input)
-                    if len(test_xs) == 0:
-                        continue
-                    c = sess.run(cost, feed_dict={X: test_xs})
-                    costs.append(c)
-
-                avg_cost = sum(costs) / len(costs)
-                print("Validation set cost:", "{:.9f}".format(avg_cost))
-                if avg_cost > last_valid_cost:
-                    print("Validation cost worsened. Breaking training.")
-                    break
-                else:
-                    last_valid_cost = avg_cost
-                    saver.save(sess, "models/autoencoder.ckpt")
-
-        print("Optimization Finished!")
+        return tuple(code_int_array)
 
 
 if __name__ == "__main__":
